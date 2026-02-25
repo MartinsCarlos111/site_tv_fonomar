@@ -202,12 +202,36 @@ export default function SimulacaoForm() {
     };
 
     setSubmitting(true);
-    setSendStatus({ msg: "Redirecionando ao checkout...", color: "black" });
+    setSendStatus({ msg: "Criando checkout no Mercado Pago...", color: "black" });
 
     try {
-      sessionStorage.setItem("checkoutFormData", JSON.stringify(payload));
-      setSendStatus({ msg: "✅ Redirecionando ao pagamento...", color: "green" });
-      window.location.href = "/pagamento";
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setSendStatus({
+          msg: "❌ " + (data.error || "Erro ao criar checkout. Tente novamente."),
+          color: "red",
+        });
+        setSubmitting(false);
+        return;
+      }
+
+      if (!data.init_point) {
+        setSendStatus({
+          msg: "❌ Resposta sem URL de checkout (init_point).",
+          color: "red",
+        });
+        setSubmitting(false);
+        return;
+      }
+
+      setSendStatus({ msg: "✅ Redirecionando para o Mercado Pago...", color: "green" });
+      window.location.href = data.init_point as string;
     } catch (err) {
       console.error(err);
       setSendStatus({

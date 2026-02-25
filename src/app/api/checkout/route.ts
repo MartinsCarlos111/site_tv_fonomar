@@ -1,50 +1,100 @@
 import { NextResponse } from "next/server";
-import { createOrder, type MPCreateOrderBody } from "@/lib/mercado-pago";
 
-/**
- * POST /api/checkout
- * Cria uma order no Mercado Pago (Checkout Transparente - Orders API).
- * Body: MPCreateOrderBody (type, external_reference, total_amount, payer, transactions, etc.)
- */
+const MP_PREFERENCES_URL = "https://api.mercadopago.com/checkout/preferences";
+
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as MPCreateOrderBody;
+    const body = await request.json();
+    const {
+      nome,
+      email,
+      valor_mensal_total,
+      plano,
+      resumo,
+    } = body as {
+      nome?: string;
+      email?: string;
+      valor_mensal_total?: number;
+      plano?: string;
+      resumo?: string;
+    };
 
-    if (!body.external_reference || !body.total_amount || !body.payer?.email) {
+    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+    if (!accessToken) {
       return NextResponse.json(
-        {
-          error: "Campos obrigatórios: external_reference, total_amount, payer (com email)",
-        },
+        { error: "MERCADOPAGO_ACCESS_TOKEN não configurado" },
+        { status: 500 }
+      );
+    }
+
+    if (!nome || !email) {
+      return NextResponse.json(
+        { error: "Campos obrigatórios: nome e email" },
         { status: 400 }
       );
     }
 
-    if (
-      !body.transactions?.payments?.length ||
-      body.transactions.payments.some(
-        (p) => !p.amount || !p.payment_method?.id || !p.payment_method?.type
-      )
-    ) {
+    const total = Number(valor_mensal_total);
+    if (!total || total <= 0) {
       return NextResponse.json(
-        {
-          error:
-            "transactions.payments deve ter ao menos um item com amount e payment_method (id, type)",
-        },
+        { error: "Valor inválido (valor_mensal_total)" },
         { status: 400 }
       );
     }
 
-    const order = await createOrder(body);
-    return NextResponse.json(order, { status: 201 });
+    const origin = request.headers.get("origin") ?? "";
+    const baseUrl = origin || "http://localhost:3000";
+
+    const prefRes = await fetch(MP_PREFERENCES_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        items: [
+          {
+            title: plano ?? "Plano TV Fonomar",
+            quantity: 1,
+            currency_id: "BRL",
+            unit_price: total,
+            description: resumo ?? "",
+          },
+        ],
+        payer: {
+          name: nome,
+          email,
+        },
+        statement_descriptor: "TV Fonomar",
+        back_urls: {
+          success: `${baseUrl}/checkout/sucesso`,
+          failure: `${baseUrl}/checkout/erro`,
+          pending: `${baseUrl}/checkout/pending`,
+        },
+      }),
+    });
+
+    const data = await prefRes.json().catch(() => ({}));
+
+    if (!prefRes.ok) {
+      const msg =
+        (data && (data.message || data.error)) ||
+        `Erro ao criar preferência (${prefRes.status})`;
+      return NextResponse.json({ error: msg }, { status: 502 });
+    }
+
+    const initPoint = data.init_point || data.sandbox_init_point;
+    if (!initPoint) {
+      return NextResponse.json(
+        { error: "Resposta do Mercado Pago sem init_point" },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({ init_point: initPoint, preference: data });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Erro ao criar order";
-    const status =
-      typeof (err as { status?: number }).status === "number"
-        ? (err as { status: number }).status
-        : 502;
-    return NextResponse.json(
-      { error: message },
-      { status: status >= 400 ? status : 502 }
-    );
+    const message =
+      err instanceof Error ? err.message : "Erro ao criar preferência de checkout";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
