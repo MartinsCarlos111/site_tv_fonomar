@@ -66,6 +66,9 @@ export async function POST(request: Request) {
           email,
         },
         statement_descriptor: "TV Fonomar",
+        payment_methods: {
+          max_installments: 12,
+        },
         back_urls: {
           success: `${baseUrl}/checkout/sucesso`,
           failure: `${baseUrl}/checkout/erro`,
