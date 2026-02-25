@@ -1,9 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-
-const WEBAPP_URL =
-  "https://script.google.com/macros/s/AKfycbwWymQk5MzV0zaf1L8WSJS5Od0Lj6JxMu-i6PufEG7yZKQneecjPplHTS0Tt_Sm7pEm/exec";
+import { useCallback, useState } from "react";
 
 const LOCAIS = [
   "Barbearia Moraes",
@@ -44,14 +41,6 @@ function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function nowISO(): string {
-  return new Date().toISOString();
-}
-
-function uuidToken(): string {
-  return "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
-}
-
 function validateEmailSimple(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeText(email));
 }
@@ -67,7 +56,6 @@ export default function SimulacaoForm() {
   const [selectedPlan, setSelectedPlan] = useState<Plano | null>(null);
   const [sendStatus, setSendStatus] = useState<{ msg: string; color: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const qtdLocais = locaisSelecionados.size;
 
@@ -151,62 +139,7 @@ export default function SimulacaoForm() {
     );
   }
 
-  // Iframe-based form submission
-  const submitViaIframe = (
-    payload: Record<string, string>,
-    onDone: () => void,
-    onError: (err: Error) => void,
-  ) => {
-    const iframe = iframeRef.current;
-    if (!iframe) { onError(new Error("iframe not found")); return; }
-
-    const formPost = document.createElement("form");
-    formPost.method = "POST";
-    formPost.action = WEBAPP_URL;
-    formPost.target = "hidden_iframe";
-    formPost.style.display = "none";
-
-    for (const key in payload) {
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = key;
-      input.value = payload[key];
-      formPost.appendChild(input);
-    }
-    document.body.appendChild(formPost);
-
-    let loadedOnce = false;
-
-    const cleanup = () => {
-      iframe.removeEventListener("load", onLoad);
-      iframe.removeEventListener("error", onErr);
-      setTimeout(() => formPost.remove(), 500);
-    };
-
-    const onLoad = () => {
-      if (loadedOnce) return;
-      loadedOnce = true;
-      onDone();
-      cleanup();
-    };
-
-    const onErr = () => {
-      onError(new Error("Falha ao enviar (erro de carregamento do iframe)."));
-      cleanup();
-    };
-
-    iframe.addEventListener("load", onLoad);
-    iframe.addEventListener("error", onErr);
-
-    try {
-      formPost.submit();
-    } catch {
-      onError(new Error("Não foi possível submeter o formulário."));
-      cleanup();
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     setSendStatus({ msg: "Validando...", color: "black" });
@@ -253,57 +186,41 @@ export default function SimulacaoForm() {
       `Valor mensal: ${formatBRL(total)}`,
     ].join(" | ");
 
-    const token = uuidToken();
-
-    const payload: Record<string, string> = {
-      token,
-      origem: "form_simulacao_v4_assinatura",
-      timestamp: nowISO(),
+    const payload = {
       nome: nomeSafe,
       cpf: cpfSafe,
       endereco: enderecoSafe,
       whatsapp: whatsappSafe,
       email: emailSafe,
       locais: locaisArray.join(" | "),
-      qtd_locais: String(locaisArray.length),
-      fidelidade_anos: String(selectedFidelity),
+      qtd_locais: locaisArray.length,
+      fidelidade_anos: selectedFidelity,
       plano: selectedPlan,
-      valor_base_unitario: String(base),
-      valor_mensal_total: String(total),
+      valor_base_unitario: base,
+      valor_mensal_total: total,
       resumo: resumoText,
-      indicacao: "",
     };
 
     setSubmitting(true);
-    setSendStatus({ msg: "Gerando contrato... abrindo tela de assinatura...", color: "black" });
+    setSendStatus({ msg: "Redirecionando ao checkout...", color: "black" });
 
-    submitViaIframe(
-      payload,
-      () => {
-        const reviewUrl = WEBAPP_URL + "?review=true&token=" + encodeURIComponent(token);
-        window.open(reviewUrl, "_blank", "noopener");
-        setSendStatus({ msg: "✅ Enviado! A tela de assinatura foi aberta em outra aba.", color: "green" });
-        setSubmitting(false);
-      },
-      (err) => {
-        console.error(err);
-        alert("Erro ao enviar o formulário.");
-        setSendStatus({ msg: "❌ Erro ao enviar: " + (err.message || "Erro desconhecido."), color: "red" });
-        setSubmitting(false);
-      },
-    );
+    try {
+      sessionStorage.setItem("checkoutFormData", JSON.stringify(payload));
+      setSendStatus({ msg: "✅ Redirecionando ao pagamento...", color: "green" });
+      window.location.href = "/pagamento";
+    } catch (err) {
+      console.error(err);
+      setSendStatus({
+        msg: "❌ Erro: " + (err instanceof Error ? err.message : "Erro desconhecido."),
+        color: "red",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <>
-      <iframe
-        name="hidden_iframe"
-        id="hidden_iframe"
-        ref={iframeRef}
-        style={{ display: "none" }}
-        title="hidden_iframe"
-      />
-
       <form id="adForm" noValidate onSubmit={handleSubmit}>
         <div className="form-row">
           <label>
