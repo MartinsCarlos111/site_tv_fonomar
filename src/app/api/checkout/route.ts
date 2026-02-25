@@ -9,12 +9,14 @@ export async function POST(request: Request) {
       nome,
       email,
       valor_mensal_total,
+      fidelidade_anos,
       plano,
       resumo,
     } = body as {
       nome?: string;
       email?: string;
       valor_mensal_total?: number;
+      fidelidade_anos?: number;
       plano?: string;
       resumo?: string;
     };
@@ -34,13 +36,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const total = Number(valor_mensal_total);
-    if (!total || total <= 0) {
+    const valorMensal = Number(valor_mensal_total);
+    if (!valorMensal || valorMensal <= 0) {
       return NextResponse.json(
         { error: "Valor inválido (valor_mensal_total)" },
         { status: 400 }
       );
     }
+
+    const anos = Math.max(1, Math.min(3, Math.floor(Number(fidelidade_anos) || 1)));
+    const meses = anos * 12;
+    const total = Math.round(valorMensal * meses * 100) / 100;
 
     const origin = request.headers.get("origin") ?? "";
     const baseUrl = origin || "http://localhost:3000";
@@ -54,11 +60,11 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         items: [
           {
-            title: plano ?? "Plano TV Fonomar",
+            title: `${plano ?? "Plano TV Fonomar"} (${meses}x R$ ${valorMensal.toFixed(2)})`,
             quantity: 1,
             currency_id: "BRL",
             unit_price: total,
-            description: resumo ?? "",
+            description: resumo ?? `${anos} ano(s) · ${meses} parcelas de R$ ${valorMensal.toFixed(2)}`,
           },
         ],
         payer: {
