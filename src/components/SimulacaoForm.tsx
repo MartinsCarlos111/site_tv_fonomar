@@ -24,9 +24,9 @@ interface PriceRow {
 }
 
 const PRICE_TABLE: PriceRow[] = [
-  { fidelidade: 1, precos: { "Bronze 15 seg.": 80, "Prata 30 seg.": 144, "Ouro 45 seg.": 204 } },
-  { fidelidade: 2, precos: { "Bronze 15 seg.": 70, "Prata 30 seg.": 126, "Ouro 45 seg.": 176 } },
-  { fidelidade: 3, precos: { "Bronze 15 seg.": 50, "Prata 30 seg.": 90, "Ouro 45 seg.": 125 } },
+  { fidelidade: 1, precos: { "Bronze 15 seg.": 99, "Prata 30 seg.": 179, "Ouro 45 seg.": 249 } },
+  { fidelidade: 2, precos: { "Bronze 15 seg.": 89, "Prata 30 seg.": 159, "Ouro 45 seg.": 229 } },
+  { fidelidade: 3, precos: { "Bronze 15 seg.": 69, "Prata 30 seg.": 119, "Ouro 45 seg.": 169 } },
 ];
 
 function onlyDigits(str: string): string {
