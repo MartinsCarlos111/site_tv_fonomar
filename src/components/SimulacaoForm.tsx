@@ -405,7 +405,7 @@ export default function SimulacaoForm() {
         </div>
 
         <button type="submit" className="submit-btn" disabled={submitting}>
-          {submitting ? "Enviando..." : "Enviar"}
+          {submitting ? "Processando..." : "Contratar"}
         </button>
 
         {sendStatus && (
