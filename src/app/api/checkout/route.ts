@@ -1,35 +1,9 @@
 import { NextResponse } from "next/server";
 
 const MP_PREFERENCES_URL = "https://api.mercadopago.com/checkout/preferences";
-const MP_USERS_ME_URL = "https://api.mercadolibre.com/users/me";
 
-/** Fallback quando a API não retorna o nome do dono da conta */
-const NOME_RECEBEDOR_FALLBACK = "TV Fonomar";
-
-/**
- * Obtém o nome do recebedor (dono da conta MP) pela API Mercado Libre.
- * Usa o mesmo Access Token; retorna first_name + last_name ou nickname.
- */
-async function getNomeRecebedor(accessToken: string): Promise<string> {
-  try {
-    const res = await fetch(MP_USERS_ME_URL, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = (await res.json().catch(() => null)) as {
-      first_name?: string;
-      last_name?: string;
-      nickname?: string;
-    } | null;
-    if (!data) return NOME_RECEBEDOR_FALLBACK;
-    const first = (data.first_name ?? "").trim();
-    const last = (data.last_name ?? "").trim();
-    if (first || last) return `${first} ${last}`.trim();
-    if ((data.nickname ?? "").trim()) return (data.nickname as string).trim();
-    return NOME_RECEBEDOR_FALLBACK;
-  } catch {
-    return NOME_RECEBEDOR_FALLBACK;
-  }
-}
+/** Nome do recebedor exibido nos detalhes do pagamento */
+const NOME_RECEBEDOR = "TvGoWork";
 
 export async function POST(request: Request) {
   try {
@@ -80,8 +54,6 @@ export async function POST(request: Request) {
     const origin = request.headers.get("origin") ?? "";
     const baseUrl = origin || "http://localhost:3000";
 
-    const nomeRecebedor = await getNomeRecebedor(accessToken);
-
     const prefRes = await fetch(MP_PREFERENCES_URL, {
       method: "POST",
       headers: {
@@ -91,20 +63,26 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         items: [
           {
-            title: `${nomeRecebedor} · ${plano ?? "Plano"} (${meses}x R$ ${valorMensal.toFixed(2)})`,
+            title: `${NOME_RECEBEDOR} · ${plano ?? "Plano"} (${meses}x R$ ${valorMensal.toFixed(2)})`,
             quantity: 1,
             currency_id: "BRL",
             unit_price: total,
-            description: resumo ? `${nomeRecebedor} – ${resumo}` : `${nomeRecebedor} – ${anos} ano(s) · ${meses} parcelas de R$ ${valorMensal.toFixed(2)}`,
+            description: resumo ? `${NOME_RECEBEDOR} – ${resumo}` : `${NOME_RECEBEDOR} – ${anos} ano(s) · ${meses} parcelas de R$ ${valorMensal.toFixed(2)}`,
           },
         ],
         payer: {
           name: nome,
           email,
         },
-        statement_descriptor: nomeRecebedor.slice(0, 22),
+        statement_descriptor: NOME_RECEBEDOR.slice(0, 22),
         payment_methods: {
           max_installments: 12,
+          excluded_payment_types: [
+            { id: "ticket" },       // boleto
+            { id: "debit_card" },   // cartão de débito
+            { id: "bank_transfer" },
+            { id: "atm" },
+          ],
         },
         back_urls: {
           success: `${baseUrl}/checkout/sucesso`,
